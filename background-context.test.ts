@@ -1,4 +1,4 @@
-import type { AgentMessage } from "@mariozechner/pi-agent-core";
+import type { AgentMessage } from "./src/types.js";
 import { describe, expect, it } from "vitest";
 import { buildArchivedHistorySegment, searchArchivedHistory } from "./src/archive.js";
 import { buildBackgroundContextMessage } from "./src/background-context.js";

@@ -41,6 +41,7 @@
           "replyFooterMaxCategories": 2,
           "tokenCalibrationEnabled": true,
           "tokenCalibrationAlpha": 0.25,
+          "allowCrossSessionCommands": false,
         },
       },
     },

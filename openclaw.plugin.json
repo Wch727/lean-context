@@ -1,5 +1,6 @@
 {
   "id": "lean-context",
+  "version": "2026.11.3",
   "kind": "context-engine",
   "enabledByDefault": false,
   "name": "Lean Context",

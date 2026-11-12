@@ -1,5 +1,8 @@
 # Lean Context
 
+> **2026-11-12 已移植到 OpenClaw 2026.11.3。** 项目仍为归档原型，不维护。
+> 移植细节和测试状态见 [PORT_NOTES.md](./PORT_NOTES.md)，安全说明见 [SECURITY.md](./SECURITY.md)。
+
 `lean-context` 是一个 OpenClaw 原生 `context-engine` 插件，目标很直接：
 
 - 减少上下文 / 输入 token 压力
@@ -202,6 +205,7 @@ openclaw plugins enable lean-context
 - `compressionNoticeEnabled`
 - `workflowHintsEnabled`
 - `replyFooterEnabled`
+- `allowCrossSessionCommands`（默认 `false`，显式跨会话命令参数需要开启）
 
 ## 日常怎么用
 
@@ -249,17 +253,17 @@ openclaw plugins enable lean-context
 
 ## 测试
 
-插件级类型检查：
+在插件目录内：
 
-```powershell
-.\node_modules\.bin\tsc.cmd -p extensions\lean-context\tsconfig.json --noEmit
+```bash
+npm install
+./node_modules/.bin/tsc -p tsconfig.json --noEmit
+./node_modules/.bin/vitest run
 ```
 
-Vitest：
-
-```powershell
-.\node_modules\.bin\vitest.cmd run extensions\lean-context\engine.test.ts
-```
+2026.11.3 移植后的状态：类型检查通过，单测 **29 / 37 通过**。8 个失败是移植前就存在的断言漂移
+（原 Windows 开发机上 Vitest 因 `spawn EPERM` 从未跑通），不是移植引入的回归；逐条说明见
+[PORT_NOTES.md](./PORT_NOTES.md#known-failing-tests-pre-existing)。
 
 ## 客观评价
 

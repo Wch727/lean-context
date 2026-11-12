@@ -45,6 +45,7 @@ export const DEFAULT_LEAN_CONTEXT_CONFIG: LeanContextConfig = {
   replyFooterMaxCategories: 2,
   tokenCalibrationEnabled: true,
   tokenCalibrationAlpha: 0.25,
+  allowCrossSessionCommands: false,
 };
 
 function readNumber(
@@ -203,5 +204,8 @@ export function resolveLeanContextConfig(raw: unknown): LeanContextConfig {
     tokenCalibrationAlpha:
       readNumber(input, "tokenCalibrationAlpha", { min: 0.05, max: 1 }) ??
       DEFAULT_LEAN_CONTEXT_CONFIG.tokenCalibrationAlpha,
+    allowCrossSessionCommands:
+      readBoolean(input, "allowCrossSessionCommands") ??
+      DEFAULT_LEAN_CONTEXT_CONFIG.allowCrossSessionCommands,
   };
 }

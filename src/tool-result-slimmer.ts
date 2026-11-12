@@ -16,6 +16,17 @@ import {
 } from "./helpers.js";
 import type { AgentMessage, LeanContextConfig, SavingsEvent, SavingsTotals } from "./types.js";
 
+const SECURE_FILE_MODE = 0o600;
+const SECURE_DIR_MODE = 0o700;
+
+function hardenModeSync(target: string, mode: number): void {
+  try {
+    fs.chmodSync(target, mode);
+  } catch {
+    // Best effort: chmod is a no-op or unsupported on some platforms (e.g. Windows).
+  }
+}
+
 type SlimToolResultParams = {
   config: LeanContextConfig;
   stateRootDir: string;
@@ -105,7 +116,8 @@ function buildArchivePath(params: SlimToolResultParams): string {
     "tool-results",
     sessionStorageKey(params.sessionId ?? "unknown", params.sessionKey),
   );
-  fs.mkdirSync(root, { recursive: true });
+  fs.mkdirSync(root, { recursive: true, mode: SECURE_DIR_MODE });
+  hardenModeSync(root, SECURE_DIR_MODE);
   const toolPart =
     (params.toolName ?? "tool").replace(/[^a-zA-Z0-9._-]+/g, "-").slice(0, 40) || "tool";
   const callId =
@@ -188,8 +200,9 @@ function maybeArchiveOriginal(params: SlimToolResultParams): string | undefined 
       null,
       2,
     )}\n`,
-    "utf8",
+    { encoding: "utf8", mode: SECURE_FILE_MODE },
   );
+  hardenModeSync(file, SECURE_FILE_MODE);
   return file;
 }
 

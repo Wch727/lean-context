@@ -1,9 +1,8 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { AgentMessage } from "@mariozechner/pi-agent-core";
-import { SessionManager } from "@mariozechner/pi-coding-agent";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { AgentMessage } from "./src/types.js";
 import { LeanContextEngine, recordPendingSlimming } from "./src/engine.js";
 import { estimateMessagesTokens, estimateTextTokens } from "./src/helpers.js";
 import {
@@ -78,12 +77,11 @@ function buildAttachmentHeavyHistory(): AgentMessage[] {
 
 async function createSessionFile(messages: AgentMessage[]): Promise<string> {
   const file = path.join(tempRoot, "session.jsonl");
-  await fs.writeFile(file, "", "utf8");
-  const sm = SessionManager.open(file);
-  const appendMessage = sm.appendMessage.bind(sm) as unknown as (message: AgentMessage) => void;
-  for (const message of messages) {
-    appendMessage(message);
-  }
+  await fs.writeFile(
+    file,
+    `${messages.map((message) => JSON.stringify({ message })).join("\n")}\n`,
+    "utf8",
+  );
   return file;
 }
 
@@ -351,7 +349,7 @@ describe("lean-context engine", () => {
     expect(sessionData.lastAutoCompactFailureReason).toContain("boom");
     expect(sessionData.summary.statusNotices?.[0]).toContain("minimal fallback state");
     expect(
-      sessionData.fallbackState.goal || sessionData.fallbackState.changed_files.length > 0,
+      Boolean(sessionData.fallbackState.goal) || sessionData.fallbackState.changed_files.length > 0,
     ).toBe(true);
     compactSpy.mockRestore();
 

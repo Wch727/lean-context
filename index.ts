@@ -10,6 +10,7 @@ import {
   formatArchiveRestoreForCommand,
   searchArchivedHistory,
 } from "./src/archive.js";
+import { checkCommandScope, hasExplicitSessionIdentity } from "./src/command-scope.js";
 import { resolveLeanContextConfig } from "./src/config.js";
 import { LeanContextEngine, recordPendingSlimming } from "./src/engine.js";
 import {
@@ -46,6 +47,9 @@ function formatCommandUsage(): string {
     "- /lean-context restore <sessionId> [sessionKey] -- <query>",
     "- /lean-context latest <sessionId> [sessionKey]",
     "- /lean-context summary <sessionId> [sessionKey]",
+    "",
+    "Without explicit ids, commands use the current conversation's session.",
+    "Cross-session arguments require an authorized sender and allowCrossSessionCommands=true.",
   ].join("\n");
 }
 
@@ -60,6 +64,7 @@ function resolveSessionIdentity(sessionId?: string, sessionKey?: string): string
 
 async function resolveArchiveCommandTarget(params: {
   pluginStateDir: string;
+  ctx: PluginCommandContext;
   sessionId?: string;
   sessionKey?: string;
 }) {
@@ -67,6 +72,12 @@ async function resolveArchiveCommandTarget(params: {
     return {
       sessionId: params.sessionId,
       sessionKey: params.sessionKey,
+    };
+  }
+  if (params.ctx.sessionId) {
+    return {
+      sessionId: params.ctx.sessionId,
+      sessionKey: params.ctx.sessionKey,
     };
   }
   const latest = await readLatestTurnReport({
@@ -85,20 +96,29 @@ async function handleLeanContextCommand(
   api: OpenClawPluginApi,
   ctx: PluginCommandContext,
 ): Promise<ReplyPayload> {
-  const pluginStateDir = await resolvePluginStateDir(api);
   const rawArgs = (ctx.args ?? "").trim();
   const args = rawArgs.split(/\s+/).filter(Boolean);
   const action = args[0]?.toLowerCase() ?? "latest";
+  const config = resolveLeanContextConfig(api.pluginConfig);
+  const scope = checkCommandScope({
+    isAuthorizedSender: ctx.isAuthorizedSender,
+    allowCrossSessionCommands: config.allowCrossSessionCommands,
+    hasExplicitSessionArgs: hasExplicitSessionIdentity(action, args),
+  });
+  if (!scope.allowed) {
+    return { text: scope.reason };
+  }
+  const pluginStateDir = await resolvePluginStateDir(api);
   if (action === "help") {
     return { text: formatCommandUsage() };
   }
   if (action === "summary") {
-    const sessionId = args[1];
-    const sessionKey = args[2];
+    const sessionId = args[1] ?? ctx.sessionId;
+    const sessionKey = args[1] ? args[2] : ctx.sessionKey;
     if (!sessionId) {
       return {
         text:
-          "Provide a session id for /lean-context summary <sessionId> [sessionKey].\n\n" +
+          "No active session is available. Provide one for /lean-context summary <sessionId> [sessionKey].\n\n" +
           formatCommandUsage(),
       };
     }
@@ -116,6 +136,7 @@ async function handleLeanContextCommand(
   if (action === "archive") {
     const target = await resolveArchiveCommandTarget({
       pluginStateDir,
+      ctx,
       sessionId: args[1],
       sessionKey: args[2],
     });
@@ -156,11 +177,13 @@ async function handleLeanContextCommand(
       delimiterIndex >= 0
         ? await resolveArchiveCommandTarget({
             pluginStateDir,
+            ctx,
             sessionId: beforeDelimiter[0],
             sessionKey: beforeDelimiter[1],
           })
         : await resolveArchiveCommandTarget({
             pluginStateDir,
+            ctx,
           });
     if (!target) {
       return {
@@ -200,7 +223,11 @@ async function handleLeanContextCommand(
         : undefined;
   const report = await readLatestTurnReport({
     pluginStateDir,
-    ...(sessionId ? { sessionId, sessionKey } : {}),
+    ...(sessionId
+      ? { sessionId, sessionKey }
+      : ctx.sessionId
+        ? { sessionId: ctx.sessionId, sessionKey: ctx.sessionKey }
+        : {}),
   });
   if (!report) {
     return {

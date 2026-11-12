@@ -1,10 +1,15 @@
 import fs from "node:fs";
-import type { OpenClawConfig, PluginLogger } from "openclaw/plugin-sdk/core";
-import {
-  getMemorySearchManager,
-  resolveDefaultAgentId,
-  resolveSessionAgentId,
-} from "openclaw/plugin-sdk/memory-core";
+import type { HarnessContextEngine } from "openclaw/plugin-sdk/agent-harness-runtime";
+import type {
+  ContextEngineSessionTarget,
+  OpenClawConfig,
+  PluginLogger,
+} from "openclaw/plugin-sdk/core";
+import { readVisibleSessionTranscriptMessageEntries } from "openclaw/plugin-sdk/session-transcript-runtime";
+
+type ContextEngineRuntimeContext = Parameters<
+  NonNullable<HarnessContextEngine["compact"]>
+>[0]["runtimeContext"];
 import {
   buildArchiveRecoveryMessage,
   buildArchivedHistorySegment,
@@ -234,37 +239,11 @@ async function collectRecallSnippets(params: {
   ) {
     return [];
   }
-  try {
-    const agentId = params.sessionKey
-      ? resolveSessionAgentId({
-          sessionKey: params.sessionKey,
-          config: params.cfg,
-        })
-      : resolveDefaultAgentId(params.cfg);
-    const searchManager = await getMemorySearchManager({
-      cfg: params.cfg,
-      agentId,
-    });
-    if (!searchManager.manager) {
-      return [];
-    }
-    const results = await searchManager.manager.search(params.prompt.trim(), {
-      maxResults: params.config.maxRecallResults,
-      minScore: params.config.recallMinScore,
-      sessionKey: params.sessionKey,
-    });
-    return results.slice(0, params.config.maxRecallResults).map((result) => ({
-      path: typeof result.path === "string" ? result.path : undefined,
-      source: typeof result.source === "string" ? result.source : undefined,
-      snippet:
-        typeof result.snippet === "string" && result.snippet.trim()
-          ? result.snippet.trim()
-          : JSON.stringify(result).slice(0, 200),
-      score: typeof result.score === "number" ? result.score : undefined,
-    }));
-  } catch {
-    return [];
-  }
+  // Host memory search is no longer exposed through the public plugin SDK in
+  // OpenClaw 2026.11.x (memory moved to an exclusive memory-plugin capability).
+  // lean-context keeps its own archive recall; host-memory recall is disabled.
+  void params.cfg;
+  return [];
 }
 
 async function collectArchiveRecoveryHits(params: {
@@ -376,6 +355,42 @@ function messagesFromSessionFile(sessionFile: string): AgentMessage[] {
   } catch {
     return [];
   }
+}
+
+/**
+ * Reads the active transcript through the runtime's session-transcript API.
+ *
+ * OpenClaw 2026.11.x stores sessions in SQLite and no longer treats
+ * `sessionFile` as a live transcript source. Engines must read by session
+ * identity (`sessionTarget` / session id + key) and keep the file locator only
+ * as a legacy fallback.
+ */
+async function readSessionMessages(params: {
+  sessionId: string;
+  sessionKey?: string;
+  sessionFile?: string;
+  sessionTarget?: ContextEngineSessionTarget;
+  runtimeContext?: ContextEngineRuntimeContext;
+}): Promise<AgentMessage[]> {
+  const target = params.sessionTarget ?? params.runtimeContext?.sessionTarget;
+  const sessionId = target?.sessionId ?? params.sessionId;
+  const sessionKey = target?.sessionKey ?? params.sessionKey;
+  const sqliteBacked = params.runtimeContext?.transcriptStorage?.kind === "sqlite";
+  if (sessionKey && (sqliteBacked || target)) {
+    try {
+      const entries = await readVisibleSessionTranscriptMessageEntries({
+        ...(target?.agentId ? { agentId: target.agentId } : {}),
+        sessionId,
+        sessionKey,
+        ...(target?.storePath ? { storePath: target.storePath } : {}),
+        ...(target?.threadId !== undefined ? { threadId: target.threadId } : {}),
+      });
+      return entries.map((entry) => entry.message);
+    } catch {
+      // Fall back to the legacy file locator when the runtime store is unavailable.
+    }
+  }
+  return params.sessionFile ? messagesFromSessionFile(params.sessionFile) : [];
 }
 
 function resolveCompactionThreshold(
@@ -1076,13 +1091,18 @@ export class LeanContextEngine {
   async compact(params: {
     sessionId: string;
     sessionKey?: string;
-    sessionFile: string;
+    agentId?: string;
+    sessionTarget?: ContextEngineSessionTarget;
+    /** @deprecated Legacy file locator; SQLite-backed hosts no longer pass it. */
+    sessionFile?: string;
     tokenBudget?: number;
     force?: boolean;
     currentTokenCount?: number;
     compactionTarget?: "budget" | "threshold";
     customInstructions?: string;
-    runtimeContext?: unknown;
+    abortSignal?: AbortSignal;
+    onProgress?: () => void;
+    runtimeContext?: ContextEngineRuntimeContext;
   }) {
     const pluginStateDir = await ensurePluginStateDirs(this.deps.stateRootDir);
     const sessionData = await loadSessionData({
@@ -1095,7 +1115,13 @@ export class LeanContextEngine {
       model: modelHint,
       calibration: sessionData.tokenEstimatorCalibration,
     };
-    const messages = messagesFromSessionFile(params.sessionFile);
+    const messages = await readSessionMessages({
+      sessionId: params.sessionId,
+      sessionKey: params.sessionKey,
+      sessionFile: params.sessionFile,
+      sessionTarget: params.sessionTarget,
+      runtimeContext: params.runtimeContext,
+    });
     const rawStoredTokens = estimateMessagesTokens(messages, estimatorOptions);
     const threshold = resolveCompactionThreshold(params.tokenBudget, this.config);
     if (
@@ -1335,13 +1361,14 @@ export class LeanContextEngine {
   async afterTurn(params: {
     sessionId: string;
     sessionKey?: string;
+    sessionTarget?: ContextEngineSessionTarget;
     sessionFile: string;
     messages: AgentMessage[];
     prePromptMessageCount: number;
     autoCompactionSummary?: string;
     isHeartbeat?: boolean;
     tokenBudget?: number;
-    runtimeContext?: unknown;
+    runtimeContext?: ContextEngineRuntimeContext;
   }) {
     const pluginStateDir = await ensurePluginStateDirs(this.deps.stateRootDir);
     const sessionData = await loadSessionData({
@@ -1355,7 +1382,13 @@ export class LeanContextEngine {
       model: modelHint,
       calibration: sessionData.tokenEstimatorCalibration,
     };
-    const currentMessages = messagesFromSessionFile(params.sessionFile);
+    const currentMessages = await readSessionMessages({
+      sessionId: params.sessionId,
+      sessionKey: params.sessionKey,
+      sessionFile: params.sessionFile,
+      sessionTarget: params.sessionTarget,
+      runtimeContext: params.runtimeContext,
+    });
     const pendingSlimming = await consumePendingSlimmingEvents({
       pluginStateDir,
       sessionIdentity,
@@ -1575,9 +1608,11 @@ export class LeanContextEngine {
       await this.compact({
         sessionId: params.sessionId,
         sessionKey: params.sessionKey,
+        sessionTarget: params.sessionTarget,
         sessionFile: params.sessionFile,
         tokenBudget: params.tokenBudget,
         compactionTarget: "threshold",
+        runtimeContext: params.runtimeContext,
       }).catch(async (error: unknown) => {
         const nextFailureCount = persistedSessionData.consecutiveAutoCompactFailures + 1;
         const failureReason = error instanceof Error ? error.message : String(error);

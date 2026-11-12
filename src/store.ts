@@ -21,6 +21,31 @@ import type {
   TurnSavingsReport,
 } from "./types.js";
 
+const SECURE_FILE_MODE = 0o600;
+const SECURE_DIR_MODE = 0o700;
+
+function hardenModeSync(target: string, mode: number): void {
+  try {
+    fs.chmodSync(target, mode);
+  } catch {
+    // Best effort: chmod is a no-op or unsupported on some platforms (e.g. Windows).
+  }
+}
+
+async function hardenMode(target: string, mode: number): Promise<void> {
+  await fsp.chmod(target, mode).catch(() => undefined);
+}
+
+function ensureSecureDirSync(dir: string): void {
+  fs.mkdirSync(dir, { recursive: true, mode: SECURE_DIR_MODE });
+  hardenModeSync(dir, SECURE_DIR_MODE);
+}
+
+async function ensureSecureDir(dir: string): Promise<void> {
+  await fsp.mkdir(dir, { recursive: true, mode: SECURE_DIR_MODE });
+  await hardenMode(dir, SECURE_DIR_MODE);
+}
+
 function resolveSessionsDir(pluginStateDir: string): string {
   return path.join(pluginStateDir, "sessions");
 }
@@ -43,19 +68,19 @@ function resolvePendingDir(pluginStateDir: string): string {
 
 export function ensurePluginStateDirsSync(stateRootDir: string): string {
   const pluginStateDir = buildPluginStateDir(stateRootDir);
-  fs.mkdirSync(resolveSessionsDir(pluginStateDir), { recursive: true });
-  fs.mkdirSync(resolveSessionLedgerDir(pluginStateDir), { recursive: true });
-  fs.mkdirSync(resolveArchivesDir(pluginStateDir), { recursive: true });
-  fs.mkdirSync(resolvePendingDir(pluginStateDir), { recursive: true });
+  ensureSecureDirSync(resolveSessionsDir(pluginStateDir));
+  ensureSecureDirSync(resolveSessionLedgerDir(pluginStateDir));
+  ensureSecureDirSync(resolveArchivesDir(pluginStateDir));
+  ensureSecureDirSync(resolvePendingDir(pluginStateDir));
   return pluginStateDir;
 }
 
 export async function ensurePluginStateDirs(stateRootDir: string): Promise<string> {
   const pluginStateDir = buildPluginStateDir(stateRootDir);
-  await fsp.mkdir(resolveSessionsDir(pluginStateDir), { recursive: true });
-  await fsp.mkdir(resolveSessionLedgerDir(pluginStateDir), { recursive: true });
-  await fsp.mkdir(resolveArchivesDir(pluginStateDir), { recursive: true });
-  await fsp.mkdir(resolvePendingDir(pluginStateDir), { recursive: true });
+  await ensureSecureDir(resolveSessionsDir(pluginStateDir));
+  await ensureSecureDir(resolveSessionLedgerDir(pluginStateDir));
+  await ensureSecureDir(resolveArchivesDir(pluginStateDir));
+  await ensureSecureDir(resolvePendingDir(pluginStateDir));
   return pluginStateDir;
 }
 
@@ -194,7 +219,11 @@ export async function saveSessionData(params: {
     ...params.sessionData,
     updatedAt: nowIso(),
   };
-  await fsp.writeFile(file, `${JSON.stringify(next, null, 2)}\n`, "utf8");
+  await fsp.writeFile(file, `${JSON.stringify(next, null, 2)}\n`, {
+    encoding: "utf8",
+    mode: SECURE_FILE_MODE,
+  });
+  await hardenMode(file, SECURE_FILE_MODE);
 }
 
 export async function appendTurnReport(params: {
@@ -202,12 +231,16 @@ export async function appendTurnReport(params: {
   report: TurnSavingsReport;
 }): Promise<void> {
   const payload = `${JSON.stringify(params.report)}\n`;
-  await fsp.appendFile(globalLedgerPath(params.pluginStateDir), payload, "utf8");
-  await fsp.appendFile(
-    sessionLedgerPath(params.pluginStateDir, params.report.sessionId, params.report.sessionKey),
-    payload,
-    "utf8",
+  const globalPath = globalLedgerPath(params.pluginStateDir);
+  const sessionPath = sessionLedgerPath(
+    params.pluginStateDir,
+    params.report.sessionId,
+    params.report.sessionKey,
   );
+  await fsp.appendFile(globalPath, payload, { encoding: "utf8", mode: SECURE_FILE_MODE });
+  await fsp.appendFile(sessionPath, payload, { encoding: "utf8", mode: SECURE_FILE_MODE });
+  await hardenMode(globalPath, SECURE_FILE_MODE);
+  await hardenMode(sessionPath, SECURE_FILE_MODE);
 }
 
 export async function appendArchivedHistorySegment(params: {
@@ -215,11 +248,13 @@ export async function appendArchivedHistorySegment(params: {
   segment: ArchivedHistorySegment;
 }): Promise<void> {
   const payload = `${JSON.stringify(params.segment)}\n`;
-  await fsp.appendFile(
-    sessionArchivePath(params.pluginStateDir, params.segment.sessionId, params.segment.sessionKey),
-    payload,
-    "utf8",
+  const archivePath = sessionArchivePath(
+    params.pluginStateDir,
+    params.segment.sessionId,
+    params.segment.sessionKey,
   );
+  await fsp.appendFile(archivePath, payload, { encoding: "utf8", mode: SECURE_FILE_MODE });
+  await hardenMode(archivePath, SECURE_FILE_MODE);
 }
 
 export function appendPendingSlimmingEventsSync(params: {
@@ -236,7 +271,8 @@ export function appendPendingSlimmingEventsSync(params: {
   // Append directly — each call's events are independent.
   // Crash after append = events survive in the file (will be consumed next afterTurn).
   // Crash during consume = events either already read (deleted) or still in pending file.
-  fs.appendFileSync(targetPath, payload, "utf8");
+  fs.appendFileSync(targetPath, payload, { encoding: "utf8", mode: SECURE_FILE_MODE });
+  hardenModeSync(targetPath, SECURE_FILE_MODE);
 }
 
 export async function consumePendingSlimmingEvents(params: {

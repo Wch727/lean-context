@@ -1,4 +1,4 @@
-import type { AgentMessage } from "@mariozechner/pi-agent-core";
+import type { AgentMessage } from "openclaw/plugin-sdk/agent-harness-runtime";
 export type { AgentMessage };
 
 export type AgentContentBlock = {
@@ -190,6 +190,7 @@ export type LeanContextConfig = {
   replyFooterMaxCategories: number;
   tokenCalibrationEnabled: boolean;
   tokenCalibrationAlpha: number;
+  allowCrossSessionCommands: boolean;
 };
 
 export type StoredSessionData = {

@@ -1,11 +1,21 @@
 {
   "name": "lean-context",
-  "version": "2026.4.1",
+  "version": "2026.11.3",
+  "private": true,
   "description": "Structured context assembly, transcript slimming, and per-turn token savings reporting for OpenClaw (archived).",
   "type": "module",
   "license": "MIT",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "openclaw": "2026.11.3",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  },
   "peerDependencies": {
-    "openclaw": ">=2026.4.1"
+    "openclaw": ">=2026.11.3"
   },
   "peerDependenciesMeta": {
     "openclaw": {
