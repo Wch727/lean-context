@@ -7,11 +7,7 @@
 
 ## 0. 插件位置
 
-你现在这个插件源码目录在桌面工作区里：
-
-- [lean-context](/C:/Users/22974/Desktop/claude/openclaw/extensions/lean-context)
-
-也就是：
+插件源码就在当前仓库根目录（与 `README.md` 同级）：
 
 ```text
 .
