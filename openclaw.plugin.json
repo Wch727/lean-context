@@ -1,0 +1,138 @@
+{
+  "id": "lean-context",
+  "kind": "context-engine",
+  "enabledByDefault": false,
+  "name": "Lean Context",
+  "description": "Structured context assembly, transcript slimming, and per-turn token savings reports.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "keepRecentMessages": {
+        "type": "integer",
+        "minimum": 2
+      },
+      "keepRecentTokens": {
+        "type": "integer",
+        "minimum": 256
+      },
+      "workingMemoryMinRecentTokens": {
+        "type": "integer",
+        "minimum": 256
+      },
+      "backgroundContextMaxTokens": {
+        "type": "integer",
+        "minimum": 128
+      },
+      "workingMemoryWarnTriggerTokens": {
+        "type": "integer",
+        "minimum": 256
+      },
+      "workingMemorySoftTriggerTokens": {
+        "type": "integer",
+        "minimum": 512
+      },
+      "maxRecallResults": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "recallMinScore": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 1
+      },
+      "enableMemoryRecall": {
+        "type": "boolean"
+      },
+      "autoCompactTriggerTokens": {
+        "type": "integer",
+        "minimum": 1024
+      },
+      "autoCompactTriggerRatio": {
+        "type": "number",
+        "minimum": 0.1,
+        "maximum": 1
+      },
+      "minMessagesToCompact": {
+        "type": "integer",
+        "minimum": 2
+      },
+      "maxToolResultTokens": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "toolOutputTailLines": {
+        "type": "integer",
+        "minimum": 2
+      },
+      "toolOutputExcerptChars": {
+        "type": "integer",
+        "minimum": 128
+      },
+      "persistLargeToolResults": {
+        "type": "boolean"
+      },
+      "reportTopItems": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "dynamicSystemPromptAddition": {
+        "type": "boolean"
+      },
+      "replyFooterEnabled": {
+        "type": "boolean"
+      },
+      "replyFooterMaxCategories": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 4
+      }
+    }
+  },
+  "uiHints": {
+    "keepRecentMessages": {
+      "label": "Recent raw messages",
+      "help": "How many recent transcript messages stay verbatim in assembled context."
+    },
+    "keepRecentTokens": {
+      "label": "Recent raw token budget",
+      "help": "Approximate token budget reserved for recent verbatim transcript history."
+    },
+    "workingMemoryMinRecentTokens": {
+      "label": "Working-memory minimum raw tokens",
+      "help": "Smallest raw recent token window to retain once memory-first replay starts."
+    },
+    "backgroundContextMaxTokens": {
+      "label": "Background context budget",
+      "help": "Maximum token budget for synthesized background knowledge from session, procedural, archive, and recall sources."
+    },
+    "maxRecallResults": {
+      "label": "Recall results",
+      "help": "Maximum recall snippets to include when memory search is available."
+    },
+    "enableMemoryRecall": {
+      "label": "Enable recall",
+      "help": "Search indexed memory/recall sources and attach a few relevant snippets."
+    },
+    "autoCompactTriggerTokens": {
+      "label": "Auto compact threshold",
+      "help": "Approximate transcript token count that triggers proactive state compaction."
+    },
+    "maxToolResultTokens": {
+      "label": "Tool result slimming threshold",
+      "help": "Approximate tool-result token size that triggers transcript slimming before persistence."
+    },
+    "persistLargeToolResults": {
+      "label": "Archive full tool results",
+      "help": "Store original oversized tool results under the plugin state directory and leave a pointer in the slimmed transcript."
+    },
+    "replyFooterEnabled": {
+      "label": "Reply footer",
+      "help": "Append a concise saved-token footer to the next visible assistant reply after each turn."
+    },
+    "replyFooterMaxCategories": {
+      "label": "Footer categories",
+      "help": "How many top savings categories to mention in the per-reply footer."
+    }
+  }
+}
